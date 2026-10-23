@@ -22,16 +22,30 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: Generate Native iOS Xcode Workspace
-        run: npx expo prebuild --platform ios --clean
+        run: |
+          npx expo prebuild --platform ios --clean
+          node -e "
+            const fs = require('fs');
+            const path = require('path');
+            const pbxprojDir = fs.readdirSync('ios').find(f => f.endsWith('.xcodeproj'));
+            if (pbxprojDir) {
+              const filePath = path.join('ios', pbxprojDir, 'project.pbxproj');
+              let content = fs.readFileSync(filePath, 'utf8');
+              content = content.replace(/CODE_SIGN_STYLE = Automatic;/g, 'CODE_SIGN_STYLE = Manual;');
+              content = content.replace(/DevelopmentTeam = [^;]+;/g, 'DevelopmentTeam = \"\";');
+              fs.writeFileSync(filePath, content, 'utf8');
+              console.log('Successfully forced Manual code signing on project.pbxproj');
+            }
+          "
 
       - name: Compile Native iOS Application (Unsigned)
         run: |
           cd ios
-          ls -la
           WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
           SCHEME=$(basename "$WORKSPACE" .xcworkspace)
           echo "Building Workspace: $WORKSPACE with Scheme: $SCHEME"
-          xcodebuild -workspace "$WORKSPACE" \
+          xcodebuild clean build \
+                     -workspace "$WORKSPACE" \
                      -scheme "$SCHEME" \
                      -configuration Release \
                      -sdk iphoneos \
@@ -40,8 +54,8 @@ jobs:
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
-                     AD_HOC_CODE_SIGNING_ALLOWED=YES \
-                     build
+                     CODE_SIGN_STYLE="Manual" \
+                     DEVELOPMENT_TEAM=""
 
       - name: Package Standalone .ipa
         run: |

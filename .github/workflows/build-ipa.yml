@@ -72,9 +72,11 @@ jobs:
       - name: Precompile ExpoModulesJSI XCFramework
         run: |
           cd node_modules/expo-modules-jsi/apple
-          export PODS_ROOT="$GITHUB_WORKSPACE/ios/Pods"
+          chmod +x scripts/*.sh || true
+          export PODS_ROOT="$(cd ../../../ios/Pods && pwd)"
+          echo "Using PODS_ROOT: $PODS_ROOT"
           export PLATFORM_NAME="iphoneos"
-          ./scripts/build-xcframework.sh
+          bash ./scripts/build-xcframework.sh 2>&1 | tee build_xcframework.log
 
       - name: Compile Native iOS Application (Unsigned)
         run: |
@@ -117,6 +119,10 @@ jobs:
           if [ -f "ios/pod_install.log" ]; then
             echo "=== POD INSTALL LOG ===" >> debug_info.txt
             tail -n 200 ios/pod_install.log >> debug_info.txt
+          fi
+          if [ -f "node_modules/expo-modules-jsi/apple/build_xcframework.log" ]; then
+            echo "=== XCFRAMEWORK BUILD LOG ===" >> debug_info.txt
+            tail -n 200 node_modules/expo-modules-jsi/apple/build_xcframework.log >> debug_info.txt
           fi
           if [ -f "ios/xcodebuild.log" ]; then
             echo "=== XCODEBUILD LOG ERRORS ===" >> debug_info.txt

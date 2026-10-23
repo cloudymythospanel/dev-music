@@ -22,17 +22,15 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: Generate Native iOS Xcode Workspace
-        run: |
-          npx expo prebuild --platform ios --clean
-          cd ios
-          pod install
+        run: npx expo prebuild --platform ios --clean
 
       - name: Compile Native iOS Application (Unsigned)
         run: |
           cd ios
+          ls -la
           WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
           SCHEME=$(basename "$WORKSPACE" .xcworkspace)
-          echo "Found workspace: $WORKSPACE, scheme: $SCHEME"
+          echo "Building Workspace: $WORKSPACE with Scheme: $SCHEME"
           xcodebuild -workspace "$WORKSPACE" \
                      -scheme "$SCHEME" \
                      -configuration Release \
@@ -43,12 +41,13 @@ jobs:
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
                      AD_HOC_CODE_SIGNING_ALLOWED=YES \
-                     build > xcodebuild.log 2>&1 || (tail -n 150 xcodebuild.log && exit 1)
+                     build
 
       - name: Package Standalone .ipa
         run: |
           mkdir -p Payload
           find ios/build -name "*.app" -type d -exec cp -r {} Payload/ \;
+          ls -la Payload/
           zip -r -y DEV_MUSIC.ipa Payload
 
       - name: Upload Standalone .ipa

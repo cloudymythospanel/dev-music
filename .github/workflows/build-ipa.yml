@@ -5,6 +5,9 @@ on:
     branches: [ master, main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build Unsigned IPA for Sideloading
@@ -18,12 +21,21 @@ jobs:
         with:
           node-version: 20
 
+      - name: Configure Node Environment for Xcode
+        run: |
+          NODE_PATH=$(which node)
+          echo "Node found at $NODE_PATH"
+          sudo ln -sf "$NODE_PATH" /usr/local/bin/node || true
+          mkdir -p ~/.nvm
+          echo "export NODE_BINARY=$NODE_PATH" >> $GITHUB_ENV
+
       - name: Install Project Dependencies
         run: npm install --legacy-peer-deps
 
       - name: Generate Native iOS Xcode Workspace
         run: |
           npx expo prebuild --platform ios --clean
+          echo "export NODE_BINARY=$(which node)" > ios/.xcode.env.local
           node -e "
             const fs = require('fs');
             const path = require('path');
@@ -55,7 +67,14 @@ jobs:
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
                      CODE_SIGN_STYLE="Manual" \
-                     DEVELOPMENT_TEAM=""
+                     DEVELOPMENT_TEAM="" > xcodebuild.log 2>&1 || (tail -n 100 xcodebuild.log && exit 1)
+
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: ios/xcodebuild.log
 
       - name: Package Standalone .ipa
         run: |

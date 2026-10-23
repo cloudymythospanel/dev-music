@@ -1,25 +1,41 @@
 {
   "expo": {
-    "name": "spotify-app",
-    "slug": "spotify-app",
+    "name": "DEV MUSIC",
+    "slug": "dev-music",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/profile.jpg",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#121212",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.paneer.devmusic",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#121212",
+        "foregroundImage": "./assets/profile.jpg",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "package": "com.paneer.devmusic"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f8455a89-42cb-4151-9c66-30d38a7e8d83"
+      }
+    },
+    "plugins": [
+      "expo-audio"
+    ]
   }
 }

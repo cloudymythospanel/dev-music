@@ -37,6 +37,14 @@ function fixPackageSwift(dir) {
 console.log('Fixing Package.swift files for Swift 6.0 compatibility...');
 fixPackageSwift('node_modules');
 
+// Fix -Werror driver flags incompatible with Xcode 16
+patchFile(
+  'node_modules/expo-modules-jsi/apple/Package.swift',
+  (content) => content
+    .replace(/"-Werror",\s*"ImplicitStrongCapture",/g, '')
+    .replace(/"-Werror",\s*"NoUsage",/g, '')
+);
+
 // 2. Fix RuntimeScheduler.h attribute error
 patchFile(
   'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h',

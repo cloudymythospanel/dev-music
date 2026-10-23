@@ -46,6 +46,25 @@ jobs:
         run: |
           node -e "
             const fs = require('fs');
+            const path = require('path');
+            function fixPackageSwift(dir) {
+              try {
+                for (const f of fs.readdirSync(dir)) {
+                  const full = path.join(dir, f);
+                  if (fs.statSync(full).isDirectory()) fixPackageSwift(full);
+                  else if (f === 'Package.swift') {
+                    let content = fs.readFileSync(full, 'utf8');
+                    if (content.includes('swift-tools-version: 6.2')) {
+                      content = content.replace(/swift-tools-version:\s*6\.2/g, 'swift-tools-version: 6.0');
+                      fs.writeFileSync(full, content, 'utf8');
+                      console.log('Fixed swift-tools-version to 6.0 in:', full);
+                    }
+                  }
+                }
+              } catch(e) {}
+            }
+            fixPackageSwift('node_modules');
+
             const rsPath = 'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h';
             if (fs.existsSync(rsPath)) {
               let c = fs.readFileSync(rsPath, 'utf8');
@@ -130,7 +149,7 @@ jobs:
           fi
           if [ -f "ios/xcodebuild.log" ]; then
             echo "=== XCODEBUILD LOG ===" >> debug_info.txt
-            tail -n 300 ios/xcodebuild.log >> debug_info.txt
+            tail -n 2500 ios/xcodebuild.log >> debug_info.txt
           fi
           git add debug_info.txt
           git commit -m "debug: full failure diagnostics"

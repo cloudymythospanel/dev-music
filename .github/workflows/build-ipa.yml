@@ -34,7 +34,13 @@ jobs:
 
       - name: Generate Native iOS Xcode Workspace
         run: |
-          npx expo prebuild --platform ios --clean
+          echo "CocoaPods path and version:"
+          which pod
+          pod --version
+          npx expo prebuild --platform ios --no-install
+          cd ios
+          pod install > pod_install.log 2>&1 || (cat pod_install.log && exit 1)
+          cd ..
           echo "export NODE_BINARY=$(which node)" > ios/.xcode.env.local
           node -e "
             const fs = require('fs');
@@ -87,6 +93,10 @@ jobs:
           if [ -d "ios" ]; then
             echo "=== IOS DIR ===" >> debug_info.txt
             ls -la ios/ >> debug_info.txt
+          fi
+          if [ -f "ios/pod_install.log" ]; then
+            echo "=== POD INSTALL LOG ===" >> debug_info.txt
+            tail -n 200 ios/pod_install.log >> debug_info.txt
           fi
           if [ -f "ios/xcodebuild.log" ]; then
             echo "=== XCODEBUILD LOG ===" >> debug_info.txt

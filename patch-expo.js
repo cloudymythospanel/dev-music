@@ -53,18 +53,13 @@ patchFile(
     )
 );
 
-// 3. Ensure JavaScriptActor on runIsolated
+// 3. Fix JavaScriptActor assumeIsolated for Swift 6.0 nonisolated context
 patchFile(
   'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptActor.swift',
-  (content) => {
-    if (!content.includes('@JavaScriptActor\n  @usableFromInline\n  internal static func runIsolated')) {
-      return content.replace(
-        '@usableFromInline\n  internal static func runIsolated',
-        '@JavaScriptActor\n  @usableFromInline\n  internal static func runIsolated'
-      );
-    }
-    return content;
-  }
+  (content) => content.replace(
+    /let runner = unsafeBitCast\(runIsolated as IsolatedRunner, to: NonisolatedRunner\.self\)[\s\S]*?return runner\(operation\)/m,
+    'typealias NonisolatedFn = () -> T\n    let runner = unsafeBitCast(operation, to: NonisolatedFn.self)\n    return runner()'
+  )
 );
 
 // 4. Fix Task+immediate.swift for Swift 6.0
@@ -83,22 +78,46 @@ patchFile(
     if (!content.includes('createHostFunctionClosure')) {
       return content.replace(
         '} SWIFT_IMMORTAL_REFERENCE; // class HostFunctionClosure',
-        `} SWIFT_IMMORTAL_REFERENCE; // class HostFunctionClosure\n\ninline HostFunctionClosure *createHostFunctionClosure(RetainedSwiftPointer::Context context, HostFunctionClosure::Closure *closure, RetainedSwiftPointer::Deallocator *deallocator) {\n  return new HostFunctionClosure(context, closure, deallocator);\n}`
+        `} SWIFT_IMMORTAL_REFERENCE; // class HostFunctionClosure\n\ninline HostFunctionClosure *_Nonnull createHostFunctionClosure(RetainedSwiftPointer::Context context, HostFunctionClosure::Closure *_Nonnull closure, RetainedSwiftPointer::Deallocator *_Nonnull deallocator) {\n  return new HostFunctionClosure(context, closure, deallocator);\n}`
+      );
+    }
+    return content.replace(
+      'inline HostFunctionClosure *createHostFunctionClosure(RetainedSwiftPointer::Context context, HostFunctionClosure::Closure *closure, RetainedSwiftPointer::Deallocator *deallocator)',
+      'inline HostFunctionClosure *_Nonnull createHostFunctionClosure(RetainedSwiftPointer::Context context, HostFunctionClosure::Closure *_Nonnull closure, RetainedSwiftPointer::Deallocator *_Nonnull deallocator)'
+    );
+  }
+);
+
+// 6. Fix HostObjectCallbacks addPropNameId helper for move-only PropNameID
+patchFile(
+  'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/HostObjectCallbacks.h',
+  (content) => {
+    if (!content.includes('addPropNameId')) {
+      return content.replace(
+        '#include "RetainedSwiftPointer.h"',
+        '#include "RetainedSwiftPointer.h"\n\nnamespace expo {\ninline void addPropNameId(std::vector<facebook::jsi::PropNameID> &vector, facebook::jsi::IRuntime &runtime, const std::string &name) {\n  vector.push_back(facebook::jsi::PropNameID::forUtf8(runtime, name));\n}\n}'
       );
     }
     return content;
   }
 );
 
-// 6. Fix JavaScriptRuntime.swift consuming and HostFunctionClosure construction
+// 7. Fix JavaScriptRuntime.swift consuming and HostFunctionClosure construction
 patchFile(
   'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptRuntime.swift',
   (content) => content
-    .replace('vector.push_back(consuming: propNameId)', 'vector.push_back(propNameId)')
+    .replace(
+      'let propNameId = facebook.jsi.PropNameID.forUtf8(iRuntime, std.string(propertyName))\n        vector.push_back(consuming: propNameId)',
+      'expo.addPropNameId(&vector, iRuntime, std.string(propertyName))'
+    )
+    .replace(
+      'let propNameId = facebook.jsi.PropNameID.forUtf8(iRuntime, std.string(propertyName))\n        vector.push_back(propNameId)',
+      'expo.addPropNameId(&vector, iRuntime, std.string(propertyName))'
+    )
     .replace(/expo\.HostFunctionClosure\(context, call, deallocate\)/g, 'expo.createHostFunctionClosure(context, call, deallocate)')
 );
 
-// 7. Fix JavaScriptPromise LongLivedState nonisolated init
+// 8. Fix JavaScriptPromise LongLivedState nonisolated init
 patchFile(
   'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/Values/JavaScriptPromise.swift',
   (content) => content.replace(
@@ -107,13 +126,13 @@ patchFile(
   )
 );
 
-// 8. Fix RuntimeScheduler.h attribute error
+// 9. Fix RuntimeScheduler.h attribute error
 patchFile(
   'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h',
   (content) => content.replace(/SWIFT_RETURNS_RETAINED /g, '').replace(/ SWIFT_RETURNS_RETAINED/g, '')
 );
 
-// 9. Disable BUILD_LIBRARY_FOR_DISTRIBUTION and unmute build-xcframework.sh
+// 10. Disable BUILD_LIBRARY_FOR_DISTRIBUTION and unmute build-xcframework.sh
 patchFile(
   'node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh',
   (content) => content

@@ -90,7 +90,7 @@ jobs:
           fi
           SCHEME=$(basename "$WORKSPACE" .xcworkspace)
           echo "Building Workspace: $WORKSPACE with Scheme: $SCHEME"
-          xcodebuild clean build \
+          xcodebuild build \
                      -workspace "$WORKSPACE" \
                      -scheme "$SCHEME" \
                      -configuration Release \

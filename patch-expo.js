@@ -37,7 +37,7 @@ function fixPackageSwift(dir) {
 console.log('Fixing Package.swift files for Swift 6.0 compatibility...');
 fixPackageSwift('node_modules');
 
-// Fix -Werror driver flags and Swift 6 compiler incompatibilities in ExpoModulesJSI
+// 2. Fix -Werror driver flags and Swift 6 compiler incompatibilities in ExpoModulesJSI
 patchFile(
   'node_modules/expo-modules-jsi/apple/Package.swift',
   (content) => content
@@ -47,23 +47,42 @@ patchFile(
     .replace(/"-emit-module-interface",/g, '')
     .replace(/"-no-verify-emitted-module-interface",/g, '')
     .replace('.enableUpcomingFeature("NonisolatedNonsendingByDefault"),', '')
-    .replace('swiftLanguageModes: [.v6],', 'swiftLanguageModes: [.v5],')
     .replace(
       '.interoperabilityMode(.Cxx),',
       '.interoperabilityMode(.Cxx),\n        .enableExperimentalFeature("NonescapableTypes"),'
     )
 );
 
-// 2. Fix RuntimeScheduler.h attribute error
+// 3. Fix JavaScriptActor synchronous isolation check
+patchFile(
+  'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/JavaScriptActor.swift',
+  (content) => content.replace(
+    /@JavaScriptActor\s+@usableFromInline\s+internal static func runIsolated/g,
+    '@usableFromInline\n  internal static func runIsolated'
+  )
+);
+
+// 4. Fix JavaScriptPromise LongLivedState nonisolated init
+patchFile(
+  'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI/Runtime/Values/JavaScriptPromise.swift',
+  (content) => content.replace(
+    'private final class LongLivedState: LongLivedObject {',
+    'private final class LongLivedState: LongLivedObject {\n    nonisolated init() {}\n'
+  )
+);
+
+// 5. Fix RuntimeScheduler.h attribute error
 patchFile(
   'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h',
   (content) => content.replace(/SWIFT_RETURNS_RETAINED /g, '').replace(/ SWIFT_RETURNS_RETAINED/g, '')
 );
 
-// 3. Unmute build-xcframework.sh so errors are logged
+// 6. Disable BUILD_LIBRARY_FOR_DISTRIBUTION and unmute build-xcframework.sh
 patchFile(
   'node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh',
-  (content) => content.replace(/-quiet \\/g, '\\')
+  (content) => content
+    .replace(/-quiet \\/g, '\\')
+    .replace(/BUILD_LIBRARY_FOR_DISTRIBUTION=YES/g, 'BUILD_LIBRARY_FOR_DISTRIBUTION=NO')
 );
 
-console.log('Expo module patches completed.');
+console.log('All Expo module patches completed successfully.');

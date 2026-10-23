@@ -54,10 +54,18 @@ jobs:
                   if (fs.statSync(full).isDirectory()) fixPackageSwift(full);
                   else if (f === 'Package.swift') {
                     let content = fs.readFileSync(full, 'utf8');
+                    let changed = false;
                     if (content.includes('swift-tools-version: 6.2')) {
                       content = content.replace(/swift-tools-version:\s*6\.2/g, 'swift-tools-version: 6.0');
+                      changed = true;
+                    }
+                    if (/,\s*\)/.test(content)) {
+                      content = content.replace(/,(\s*\))/g, '$1');
+                      changed = true;
+                    }
+                    if (changed) {
                       fs.writeFileSync(full, content, 'utf8');
-                      console.log('Fixed swift-tools-version to 6.0 in:', full);
+                      console.log('Fixed Package.swift (version & trailing commas):', full);
                     }
                   }
                 }

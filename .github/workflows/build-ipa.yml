@@ -43,51 +43,7 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: Patch Expo Modules for Xcode 16 Compatibility
-        run: |
-          node -e "
-            const fs = require('fs');
-            const path = require('path');
-            function fixPackageSwift(dir) {
-              try {
-                for (const f of fs.readdirSync(dir)) {
-                  const full = path.join(dir, f);
-                  if (fs.statSync(full).isDirectory()) fixPackageSwift(full);
-                  else if (f === 'Package.swift') {
-                    let content = fs.readFileSync(full, 'utf8');
-                    let changed = false;
-                    if (content.includes('swift-tools-version: 6.2')) {
-                      content = content.replace(/swift-tools-version:\s*6\.2/g, 'swift-tools-version: 6.0');
-                      changed = true;
-                    }
-                    if (/,\s*\)/.test(content)) {
-                      content = content.replace(/,(\s*\))/g, '$1');
-                      changed = true;
-                    }
-                    if (changed) {
-                      fs.writeFileSync(full, content, 'utf8');
-                      console.log('Fixed Package.swift (version & trailing commas):', full);
-                    }
-                  }
-                }
-              } catch(e) {}
-            }
-            fixPackageSwift('node_modules');
-
-            const rsPath = 'node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h';
-            if (fs.existsSync(rsPath)) {
-              let c = fs.readFileSync(rsPath, 'utf8');
-              c = c.replace(/SWIFT_RETURNS_RETAINED /g, '').replace(/ SWIFT_RETURNS_RETAINED/g, '');
-              fs.writeFileSync(rsPath, c, 'utf8');
-              console.log('Successfully patched RuntimeScheduler.h');
-            }
-            const scriptPath = 'node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh';
-            if (fs.existsSync(scriptPath)) {
-              let c = fs.readFileSync(scriptPath, 'utf8');
-              c = c.replace(/-quiet \\\\/g, '\\\\');
-              fs.writeFileSync(scriptPath, c, 'utf8');
-              console.log('Successfully unmuted build-xcframework.sh');
-            }
-          "
+        run: node patch-expo.js
 
       - name: Generate Native iOS Xcode Workspace
         run: |

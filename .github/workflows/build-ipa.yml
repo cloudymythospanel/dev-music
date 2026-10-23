@@ -69,6 +69,13 @@ jobs:
             }
           "
 
+      - name: Precompile ExpoModulesJSI XCFramework
+        run: |
+          cd node_modules/expo-modules-jsi/apple
+          export PODS_ROOT="$GITHUB_WORKSPACE/ios/Pods"
+          export PLATFORM_NAME="iphoneos"
+          ./scripts/build-xcframework.sh
+
       - name: Compile Native iOS Application (Unsigned)
         run: |
           cd ios
@@ -112,8 +119,10 @@ jobs:
             tail -n 200 ios/pod_install.log >> debug_info.txt
           fi
           if [ -f "ios/xcodebuild.log" ]; then
-            echo "=== XCODEBUILD LOG ===" >> debug_info.txt
-            tail -n 2500 ios/xcodebuild.log >> debug_info.txt
+            echo "=== XCODEBUILD LOG ERRORS ===" >> debug_info.txt
+            grep -C 20 -i "error:" ios/xcodebuild.log | head -n 300 >> debug_info.txt || true
+            grep -C 20 "Script-46EB2E00013730.sh" ios/xcodebuild.log | head -n 300 >> debug_info.txt || true
+            tail -n 200 ios/xcodebuild.log >> debug_info.txt
           fi
           git add debug_info.txt
           git commit -m "debug: full failure diagnostics"

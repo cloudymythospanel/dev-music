@@ -22,7 +22,10 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: Generate Native iOS Xcode Workspace
-        run: npx expo prebuild --platform ios --clean
+        run: |
+          npx expo prebuild --platform ios --clean
+          cd ios
+          pod install
 
       - name: Compile Native iOS Application (Unsigned)
         run: |
@@ -33,17 +36,19 @@ jobs:
           xcodebuild -workspace "$WORKSPACE" \
                      -scheme "$SCHEME" \
                      -configuration Release \
+                     -sdk iphoneos \
                      -destination 'generic/platform=iOS' \
-                     -archivePath build/DEV_MUSIC.xcarchive \
+                     -derivedDataPath build \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
-                     archive
+                     AD_HOC_CODE_SIGNING_ALLOWED=YES \
+                     build > xcodebuild.log 2>&1 || (tail -n 150 xcodebuild.log && exit 1)
 
       - name: Package Standalone .ipa
         run: |
           mkdir -p Payload
-          cp -r ios/build/DEV_MUSIC.xcarchive/Products/Applications/*.app Payload/
+          find ios/build -name "*.app" -type d -exec cp -r {} Payload/ \;
           zip -r -y DEV_MUSIC.ipa Payload
 
       - name: Upload Standalone .ipa

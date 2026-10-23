@@ -35,6 +35,7 @@ jobs:
       - name: Generate Native iOS Xcode Workspace
         run: |
           npx expo prebuild --platform ios --clean
+          npx pod-install ios
           echo "export NODE_BINARY=$(which node)" > ios/.xcode.env.local
           node -e "
             const fs = require('fs');
@@ -53,7 +54,13 @@ jobs:
       - name: Compile Native iOS Application (Unsigned)
         run: |
           cd ios
-          WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
+          echo "Listing ios directory:"
+          ls -la
+          WORKSPACE=$(ls -d *.xcworkspace 2>/dev/null | head -n 1)
+          if [ -z "$WORKSPACE" ]; then
+            echo "ERROR: No .xcworkspace found!"
+            exit 1
+          fi
           SCHEME=$(basename "$WORKSPACE" .xcworkspace)
           echo "Building Workspace: $WORKSPACE with Scheme: $SCHEME"
           xcodebuild clean build \
@@ -67,7 +74,18 @@ jobs:
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
                      CODE_SIGN_STYLE="Manual" \
-                     DEVELOPMENT_TEAM="" > xcodebuild.log 2>&1 || (tail -n 100 xcodebuild.log && exit 1)
+                     DEVELOPMENT_TEAM="" > xcodebuild.log 2>&1 || (cat xcodebuild.log | grep -E "error:|fatal error:" -B 2 -A 5 | head -n 100 && exit 1)
+
+      - name: Push Build Log to Repo Branch on Failure
+        if: failure()
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git checkout -B debug-log
+          tail -n 400 ios/xcodebuild.log > xcodebuild_error.log 2>/dev/null || true
+          git add xcodebuild_error.log 2>/dev/null || true
+          git commit -m "debug: xcodebuild failure log" 2>/dev/null || true
+          git push -f origin debug-log 2>/dev/null || true
 
       - name: Upload Build Log
         if: always()

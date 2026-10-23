@@ -17,10 +17,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: Install Project Dependencies
-        run: npm ci
+        run: npm install --legacy-peer-deps
 
       - name: Generate Native iOS Xcode Workspace
         run: npx expo prebuild --platform ios --clean
@@ -28,8 +27,11 @@ jobs:
       - name: Compile Native iOS Application (Unsigned)
         run: |
           cd ios
-          xcodebuild -workspace DEV_MUSIC.xcworkspace \
-                     -scheme DEV_MUSIC \
+          WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          echo "Found workspace: $WORKSPACE, scheme: $SCHEME"
+          xcodebuild -workspace "$WORKSPACE" \
+                     -scheme "$SCHEME" \
                      -configuration Release \
                      -destination 'generic/platform=iOS' \
                      -archivePath build/DEV_MUSIC.xcarchive \

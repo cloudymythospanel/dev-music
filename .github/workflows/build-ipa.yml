@@ -32,7 +32,9 @@ jobs:
           node-version: 20
 
       - name: Install Project Dependencies
-        run: npm install --legacy-peer-deps
+        run: |
+          rm -f package-lock.json
+          npm install --legacy-peer-deps
 
       - name: Generate Native iOS Xcode Workspace
         run: |
@@ -43,7 +45,8 @@ jobs:
           echo "CocoaPods version:"
           pod --version
 
-          npx expo prebuild --platform ios --no-install
+          rm -rf ios
+          npx expo prebuild --platform ios --clean --no-install
 
           cd ios
           pod install > pod_install.log 2>&1 || (cat pod_install.log && exit 1)
@@ -88,7 +91,6 @@ jobs:
                      CODE_SIGN_IDENTITY="" \
                      CODE_SIGN_STYLE="Manual" \
                      DEVELOPMENT_TEAM="" \
-                     OTHER_SWIFT_FLAGS="-Xfrontend -disable-reflection-metadata" \
             > xcodebuild.log 2>&1 || (grep -E "error:|fatal error:" xcodebuild.log | head -n 80 && exit 1)
 
       - name: Push Diagnostics on Failure

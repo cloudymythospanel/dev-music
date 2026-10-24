@@ -11,18 +11,14 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.paneer.devmusic",
       "infoPlist": {
-        "UIBackgroundModes": [
-          "audio"
-        ],
+        "UIBackgroundModes": ["audio"],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#121212",
-        "foregroundImage": "./assets/profile.jpg",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/profile.jpg"
       },
       "package": "com.paneer.devmusic"
     },
@@ -35,7 +31,7 @@
       }
     },
     "plugins": [
-      "expo-audio"
+      "expo-av"
     ]
   }
 }

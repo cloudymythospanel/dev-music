@@ -14,7 +14,7 @@ import {
   FlatList,
   Keyboard,
 } from 'react-native';
-import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
+import { Audio, AVPlaybackStatus } from 'expo-av';
 import Slider from '@react-native-community/slider';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
 
@@ -126,23 +126,60 @@ export default function App() {
   const searchTimeoutRef = useRef<any>(null);
 
   const currentTrack = playlist[currentTrackIndex] || POPULAR_TRACKS[0];
-  const player = useAudioPlayer(currentTrack.url);
-  const status = useAudioPlayerStatus(player);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const [status, setStatus] = useState<{ playing: boolean; currentTime: number; duration: number; didJustFinish: boolean }>({
+    playing: false,
+    currentTime: 0,
+    duration: 1,
+    didJustFinish: false,
+  });
 
-  // Enable iOS Background Audio (Plays when screen locked / app minimized)
+  // Enable iOS Background Audio
   useEffect(() => {
-    setAudioModeAsync({
-      playsInSilentMode: true,
-      shouldPlayInBackground: true,
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: true,
+      allowsRecordingIOS: false,
     }).catch((e) => console.log('Audio mode error:', e));
   }, []);
+
+  // Load track whenever currentTrackIndex changes
+  useEffect(() => {
+    let mounted = true;
+    const loadTrack = async () => {
+      try {
+        if (soundRef.current) {
+          await soundRef.current.stopAsync().catch(() => {});
+          await soundRef.current.unloadAsync().catch(() => {});
+          soundRef.current = null;
+        }
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: currentTrack.url },
+          { shouldPlay: true, progressUpdateIntervalMillis: 500 },
+          (s: AVPlaybackStatus) => {
+            if (!mounted || !s.isLoaded) return;
+            setStatus({
+              playing: s.isPlaying,
+              currentTime: s.positionMillis / 1000,
+              duration: (s.durationMillis || 1000) / 1000,
+              didJustFinish: s.didJustFinish || false,
+            });
+          }
+        );
+        if (mounted) soundRef.current = sound;
+      } catch (e) {
+        console.log('Load error:', e);
+      }
+    };
+    loadTrack();
+    return () => { mounted = false; };
+  }, [currentTrackIndex, playlist]);
 
   // Handle song completion
   useEffect(() => {
     if (status.didJustFinish) {
       if (isRepeat) {
-        player.seekTo(0);
-        player.play();
+        soundRef.current?.setPositionAsync(0).then(() => soundRef.current?.playAsync());
       } else {
         handleNextTrack();
       }
@@ -152,19 +189,16 @@ export default function App() {
   const loadAndPlayTrack = (track: Song, fromList?: Song[]) => {
     const listToUse = fromList || playlist;
     const index = listToUse.findIndex((t) => t.id === track.id);
-    if (fromList) {
-      setPlaylist(fromList);
-    }
+    if (fromList) setPlaylist(fromList);
     setCurrentTrackIndex(index >= 0 ? index : 0);
-    player.replace(track.url);
-    player.play();
   };
 
   const handlePlayPause = () => {
+    if (!soundRef.current) return;
     if (status.playing) {
-      player.pause();
+      soundRef.current.pauseAsync();
     } else {
-      player.play();
+      soundRef.current.playAsync();
     }
   };
 
@@ -176,16 +210,14 @@ export default function App() {
     } else if (nextIndex >= playlist.length) {
       nextIndex = 0;
     }
-    loadAndPlayTrack(playlist[nextIndex]);
+    setCurrentTrackIndex(nextIndex);
   };
 
   const handlePreviousTrack = () => {
     if (playlist.length === 0) return;
     let prevIndex = currentTrackIndex - 1;
-    if (prevIndex < 0) {
-      prevIndex = playlist.length - 1;
-    }
-    loadAndPlayTrack(playlist[prevIndex]);
+    if (prevIndex < 0) prevIndex = playlist.length - 1;
+    setCurrentTrackIndex(prevIndex);
   };
 
   const toggleLike = (id: string) => {
@@ -807,7 +839,7 @@ export default function App() {
                 maximumTrackTintColor="#535353"
                 thumbTintColor="#fff"
                 onSlidingComplete={async (val) => {
-                  await player.seekTo(val);
+                  await soundRef.current?.setPositionAsync(val * 1000).catch(() => {});
                 }}
               />
               <View style={styles.sliderTimes}>

@@ -22,39 +22,35 @@ jobs:
           if [ -n "$XCODE_16" ]; then
             echo "Selecting $XCODE_16"
             sudo xcode-select -s "$XCODE_16"
-            echo "DEVELOPER_DIR=$XCODE_16/Contents/Developer" >> $GITHUB_ENV
           fi
           xcodebuild -version
+          swift --version
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Configure Node Environment for Xcode
-        run: |
-          NODE_PATH=$(which node)
-          echo "Node found at $NODE_PATH"
-          sudo ln -sf "$NODE_PATH" /usr/local/bin/node || true
-          mkdir -p ~/.nvm
-          echo "export NODE_BINARY=$NODE_PATH" >> $GITHUB_ENV
-
       - name: Install Project Dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Patch Expo Modules for Xcode 16 Compatibility
-        run: node patch-expo.js
-
       - name: Generate Native iOS Xcode Workspace
         run: |
-          echo "CocoaPods path and version:"
-          which pod
+          NODE_PATH=$(which node)
+          sudo ln -sf "$NODE_PATH" /usr/local/bin/node || true
+          echo "NODE_BINARY=$NODE_PATH" >> $GITHUB_ENV
+
+          echo "CocoaPods version:"
           pod --version
+
           npx expo prebuild --platform ios --no-install
+
           cd ios
           pod install > pod_install.log 2>&1 || (cat pod_install.log && exit 1)
           cd ..
+
           echo "export NODE_BINARY=$(which node)" > ios/.xcode.env.local
+
           node -e "
             const fs = require('fs');
             const path = require('path');
@@ -65,23 +61,13 @@ jobs:
               content = content.replace(/CODE_SIGN_STYLE = Automatic;/g, 'CODE_SIGN_STYLE = Manual;');
               content = content.replace(/DevelopmentTeam = [^;]+;/g, 'DevelopmentTeam = \"\";');
               fs.writeFileSync(filePath, content, 'utf8');
-              console.log('Successfully forced Manual code signing on project.pbxproj');
+              console.log('Forced Manual code signing.');
             }
           "
-
-      - name: Precompile ExpoModulesJSI XCFramework
-        run: |
-          cd node_modules/expo-modules-jsi/apple
-          chmod +x scripts/*.sh || true
-          export PODS_ROOT="$(cd ../../../ios/Pods && pwd)"
-          echo "Using PODS_ROOT: $PODS_ROOT"
-          export PLATFORM_NAME="iphoneos"
-          bash ./scripts/build-xcframework.sh 2>&1 | tee build_xcframework.log
 
       - name: Compile Native iOS Application (Unsigned)
         run: |
           cd ios
-          echo "Listing available schemes and workspaces:"
           xcodebuild -list
           WORKSPACE=$(ls -d *.xcworkspace 2>/dev/null | head -n 1)
           if [ -z "$WORKSPACE" ]; then
@@ -89,7 +75,7 @@ jobs:
             exit 1
           fi
           SCHEME=$(basename "$WORKSPACE" .xcworkspace)
-          echo "Building Workspace: $WORKSPACE with Scheme: $SCHEME"
+          echo "Building: $WORKSPACE  Scheme: $SCHEME"
           xcodebuild build \
                      -workspace "$WORKSPACE" \
                      -scheme "$SCHEME" \
@@ -101,37 +87,37 @@ jobs:
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
                      CODE_SIGN_STYLE="Manual" \
-                     DEVELOPMENT_TEAM="" > xcodebuild.log 2>&1 || (cat xcodebuild.log | grep -E "error:|fatal error:" -B 2 -A 5 | head -n 100 && exit 1)
+                     DEVELOPMENT_TEAM="" \
+                     OTHER_SWIFT_FLAGS="-Xfrontend -disable-reflection-metadata" \
+            > xcodebuild.log 2>&1 || (grep -E "error:|fatal error:" xcodebuild.log | head -n 80 && exit 1)
 
-      - name: Push Diagnostics and Logs on Failure
+      - name: Push Diagnostics on Failure
         if: failure()
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git checkout -B debug-log
-          echo "=== DIAGNOSTICS ===" > debug_info.txt
-          pwd >> debug_info.txt
-          ls -la >> debug_info.txt
-          if [ -d "ios" ]; then
-            echo "=== IOS DIR ===" >> debug_info.txt
-            ls -la ios/ >> debug_info.txt
-          fi
-          if [ -f "ios/pod_install.log" ]; then
-            echo "=== POD INSTALL LOG ===" >> debug_info.txt
-            tail -n 200 ios/pod_install.log >> debug_info.txt
-          fi
-          if [ -f "node_modules/expo-modules-jsi/apple/build_xcframework.log" ]; then
-            echo "=== XCFRAMEWORK BUILD LOG ===" >> debug_info.txt
-            tail -n 200 node_modules/expo-modules-jsi/apple/build_xcframework.log >> debug_info.txt
-          fi
-          if [ -f "ios/xcodebuild.log" ]; then
-            echo "=== XCODEBUILD LOG ERRORS ===" >> debug_info.txt
-            grep -C 20 -i "error:" ios/xcodebuild.log | head -n 300 >> debug_info.txt || true
-            grep -C 20 "Script-46EB2E00013730.sh" ios/xcodebuild.log | head -n 300 >> debug_info.txt || true
-            tail -n 200 ios/xcodebuild.log >> debug_info.txt
-          fi
+          {
+            echo "=== DIAGNOSTICS ==="
+            pwd
+            ls -la
+            if [ -d "ios" ]; then
+              echo "=== IOS DIR ==="
+              ls -la ios/
+            fi
+            if [ -f "ios/pod_install.log" ]; then
+              echo "=== POD INSTALL LOG (last 200) ==="
+              tail -n 200 ios/pod_install.log
+            fi
+            if [ -f "ios/xcodebuild.log" ]; then
+              echo "=== XCODEBUILD ERRORS ==="
+              grep -C 10 "error:" ios/xcodebuild.log | head -n 200 || true
+              echo "=== XCODEBUILD TAIL ==="
+              tail -n 100 ios/xcodebuild.log
+            fi
+          } > debug_info.txt 2>&1
           git add debug_info.txt
-          git commit -m "debug: full failure diagnostics"
+          git commit -m "debug: failure diagnostics"
           git push -f origin debug-log
 
       - name: Upload Build Log
@@ -144,13 +130,12 @@ jobs:
       - name: Package Standalone .ipa
         run: |
           mkdir -p Payload
-          APP_PATH=$(find ios/build/Build/Products/Release-iphoneos -name "*.app" -type d | head -n 1)
+          APP_PATH=$(find ios/build/Build/Products/Release-iphoneos -name "*.app" -type d 2>/dev/null | head -n 1)
           if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find ios/build -name "*.app" -type d | head -n 1)
+            APP_PATH=$(find ios/build -name "*.app" -type d 2>/dev/null | head -n 1)
           fi
-          echo "Found app at: $APP_PATH"
+          echo "Found app: $APP_PATH"
           cp -r "$APP_PATH" Payload/
-          ls -la Payload/
           zip -r -y DEV_MUSIC.ipa Payload
 
       - name: Upload Standalone .ipa
